@@ -1,0 +1,657 @@
+#include "stdafx.h"
+#include <windows.h>
+#include <stdio.h>
+#include<math.h>
+#include <iostream>
+#include "opencv2/core/core.hpp"//因为在属性中已经配置了opencv等目录，所以把其当成了本地目录一样
+#include "opencv2/features2d/features2d.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include"opencv2/nonfree/features2d.hpp"
+#include"opencv2/legacy/legacy.hpp"
+#include <cstdio>  
+#include <cstring>
+#include<cv.h> 
+#include <cmath>  
+#include <map>
+#include<highgui.h>
+#include<fstream>
+using namespace cv;
+using namespace std;
+int main(){
+	dkl();
+	system("pause");
+}
+int display()
+{
+	FILE *fp;
+	int nValude = 0;
+	int b, g, r;
+	char cl[100];
+	IplImage* srcImage;
+	IplImage *bwImage;
+	IplImage *bwImage1;
+	IplImage *bwImage2;
+	int W = 640;
+	int H = 480;
+	CvSize cvSize;
+	cvSize.width = W;
+	cvSize.height = H;
+
+	unsigned char max = 255;
+	unsigned char min = 0;
+	if ((fp = fopen("oneFrame10.txt", "r")) == NULL)
+		exit(1);
+	bwImage = cvCreateImage(cvSize, 8, 1);
+	bwImage1 = cvCreateImage(cvSize, 8, 1);
+	bwImage2 = cvCreateImage(cvSize, 8, 1);
+	srcImage = cvCreateImage(cvSize, 8, 3);
+	for (int i = 0; i< H; i++)
+	{
+		//uchar* ptr = (uchar*) (bwImage->imageData + i*bwimage->widthStep);
+		for (int j = 0; j<W; j++)
+		{
+			fscanf(fp, "%s", cl);
+			sscanf(cl, "%x", &nValude);
+			r = (nValude&(0xf800)) >> 11;//
+			g = (nValude&(0x07e0)) >> 5;//
+			b = (nValude&(0x001f));//
+			unsigned char RGB888[3];
+			RGB888[0] = (nValude >> 8) & 0xf8; //转换最高5位成8位红色的高5位
+			RGB888[1] = (nValude >> 3) & 0xfc; //转换中间6位成8位绿色的高6位
+			RGB888[2] = (nValude << 3) & 0xf8; //转换低5位成8位蓝色的高5位
+
+
+
+			double value = ((double)RGB888[0] * 30 + (double)RGB888[1] * 59 + (double)RGB888[2] * 11 + 50) / 100;
+			//r = r | ((r & 0x38) >> 3);
+			//printf("%x  \n", nValude);
+			//cout << b << " " << g << " " << r << endl;
+
+
+
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 0) = RGB888[2];
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 1) = RGB888[1];
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 2) = RGB888[0];
+			//cout << value << endl;
+			if (value>240)
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 255;
+			else
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 0;
+			//cout << r << "  ";
+
+		}
+
+	}
+	//cvMerge(bwImage2, bwImage1, bwImage, 0, srcImage);
+	//cvNamedWindow("RGB", 0);
+	cvShowImage("RGB", srcImage);
+	cvShowImage("thresh", bwImage);
+	cvSaveImage("thresh.png", bwImage);
+	for (int i = 0; i < H; i++)
+	{
+		//uchar* ptr = (uchar*) (bwImage->imageData + i*bwimage->widthStep);
+		for (int j = 0; j < W; j++)
+		{
+			//||(*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+			//	((*((unsigned char*)bwImage->imageData + (i + 1) * bwImage->widthStep + j)))
+			//|| (*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+			//	((*((unsigned char*)bwImage->imageData + (i - 1) * bwImage->widthStep + j)))
+			if ((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+				((*((unsigned char*)bwImage->imageData + (i + 1)*bwImage->widthStep + j)))
+				){
+				//if (i!=239)
+				*((unsigned char*)bwImage1->imageData + i*bwImage1->widthStep + j) = 255;
+			}
+			else if ((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+				((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j - 1)))){
+				*((unsigned char*)bwImage1->imageData + (i + 1)*bwImage1->widthStep + j) = 255;
+			}
+			else
+				*((unsigned char*)bwImage1->imageData + i*bwImage1->widthStep + j) = 0;
+		}
+	}
+	cvShowImage("counter", bwImage1);
+	cvWaitKey(0);
+	if (fclose(fp) != 0)
+		exit(1);
+	system("pause");
+	return 0;
+}
+int location()
+{
+	IplImage*src = cvLoadImage("thresh.png", 0);
+	IplImage*srcImage = cvLoadImage("black.png");
+	cvThreshold(src, src, 150, 255, THRESH_BINARY);
+	cvShowImage("srcp", src);
+	int rows = src->height;
+	int cols = src->width;
+	int temp, temp_p;
+	int Max = 0;
+	int count = 0;
+	int point[320][2] = { 0 };
+	int c0 = 0, c1 = 0, c2 = 0, cnts[240] = { 0 };
+	int center, center_s, center_w[240] = { 0 }, center_h[240] = { 0 };
+	int width[240], height[240];
+	double ratio[240];
+	int widths[240] = { 0 };
+
+	for (int i = 0; i < rows; i++){
+		//cout << "i: " << i << endl;
+		for (int j = 1; j < cols; j++)
+		{
+			if (j == 1)*((unsigned char*)src->imageData + i*src->widthStep + j - 1) = 0;
+			if (j == 319)*((unsigned char*)src->imageData + i*src->widthStep + j) = 0;
+			temp = *((unsigned char*)src->imageData + i*src->widthStep + j);
+			temp_p = *((unsigned char*)src->imageData + i*src->widthStep + j - 1);
+			//if (temp == 255)cout << i << endl;
+			if (temp != temp_p){
+
+				point[count][0] = i;
+				point[count][1] = j;
+				count++;
+
+			}
+			if (count == 2){
+				count = 0;
+				//printf("%d\n",i);
+				center = (point[0][1] + point[1][1]) / 2;
+				//cout << "firstSt: center_x:" << i << "\tcenter_y:" << center << endl;
+				center_s = center;
+				for (int m = i;; m++)
+				{
+
+					int x1 = 0, x2 = 0;
+					for (int n = center;; n--)
+					{
+						if (n == 0){ x1 = n; break; }
+						temp = *((unsigned char*)src->imageData + m*src->widthStep + n);
+						temp_p = *((unsigned char*)src->imageData + m*src->widthStep + n - 1);
+						//*((unsigned char*)src->imageData + m*src->widthStep + n-1) = 0;
+						cnts[c0]++;
+						if (temp != temp_p){
+							x1 = n;
+							break;
+						}
+					}
+					for (int n = center;; n++)
+					{
+						if (n == 319){ x2 = n; break; }
+						temp = *((unsigned char*)src->imageData + m*src->widthStep + n);
+						temp_p = *((unsigned char*)src->imageData + m*src->widthStep + n + 1);
+						//*((unsigned char*)src->imageData + m*src->widthStep + n-1)=0;
+						cnts[c0]++;
+						if (temp != temp_p){
+							x2 = n;
+							break;
+						}
+					}
+					//cout << "x1 " << x1 << "  x2 " << x2 << endl;
+					for (int black = x1; black <= x2; black++){
+						*((unsigned char*)src->imageData + m*src->widthStep + black) = 0;
+						cvNamedWindow("src", 0);
+						cvShowImage("src", src);
+						//cout << "m: " << m << " black: " << black;
+						//cvWaitKey(0);
+					}
+					//cout <<"x1: "<<x1<<" x2: "<<x2<< "m: " << m << endl;
+					//cvWaitKey(0);
+
+					//cvWaitKey(0);
+					center = (x1 + x2) / 2;
+					widths[c1] = x2 - x1;
+					c1++;
+					if (m == 239)temp = 0;
+					else temp = *((unsigned char*)src->imageData + (m + 1)*src->widthStep + center);
+					if (temp == 0){
+						//cout << "firstEnd: center_x:" << m << " center_y:" << center << endl;
+
+						height[c0] = m - i;
+						Max = 0;
+						for (int b = 0; b < height[c0]; b++){
+							if (Max < widths[b])Max = widths[b];
+						}
+						width[c0] = Max;
+						ratio[c0] = (double)width[c0] / (double)height[c0];
+						center_w[c0] = (center + center_s) / 2;
+						center_h[c0] = (i + m) / 2;
+						c1 = 0;
+						cout << "center: " << center_w[c0] << " " << center_h[c0] << "    Area: " << cnts[c0] << "\n" << endl;
+						cout << "width: " << width[c0] << "   height: " << height[c0] << "\n" << endl;
+						cout << "横宽比：" << ratio[c0] << "\n" << endl;
+						c0++;//c0不置零
+
+						CvPoint point1, point2;
+						point1.x = center_w[c0] - width[c0] / 2;
+						point1.y = center_h[c0] - height[c0] / 2;
+						point2.x = center_w[c0] + width[c0] / 2;
+						point2.y = center_h[c0] + height[c0] / 2;
+
+						cvNamedWindow("src", 0);
+						cvShowImage("src", src);
+						//cvShowImage("srcImage",srcImage);
+						cvWaitKey(0);
+						cvRectangle(srcImage, point1, point2, cvScalar(255, 255, 255), 3, 8, 0);
+						//system("pause");
+						break;
+					}
+				}
+				//break;
+			}
+		}
+	}
+	//cvWaitKey();
+
+	system("pause");
+	return 0;
+}
+unsigned char ThreMatrix[9600];//?t?μ?ˉ???ó
+unsigned int center_w[240], center_h[240], width[240], height[240], Area[240];
+unsigned int temp_w[240];
+unsigned int temp_h[240];
+unsigned int temp_A[240];
+unsigned int T[240];
+float radio[240];
+unsigned int widths[240];
+unsigned int MaxNum[3];
+void sort(unsigned int b[], unsigned int NUM)
+{
+	unsigned int i;
+	unsigned int j;
+	unsigned int MaxTemp;
+	unsigned int Record;
+	i = 0;
+	j = 0;
+	Record = 0;
+
+	while (j<3)
+	{
+		MaxTemp = b[0];
+		Record = 0;
+		for (i = 0; i<NUM; i++)
+		{
+			if (b[i]>MaxTemp)
+			{
+				Record = i;
+				MaxTemp = b[i];
+			}
+		}
+		b[Record] = 0;
+		MaxNum[j] = Record;
+		j++;
+	}
+
+}
+
+void dkl(void)
+{
+	FILE *fp;
+	char cl[100];
+	IplImage *bwImage;
+	CvSize cvSize;
+	cvSize.width = 320;
+	cvSize.height = 240;
+	bwImage = cvCreateImage(cvSize, 8, 1);
+	if ((fp = fopen("oneFrame5.txt", "r")) == NULL)
+		exit(1);
+	unsigned int i, j, x;
+	unsigned int Camera_Data;//?-ê?é???í·êy?Yrgb565
+	unsigned int Camera_Data_copy;//rgb888×argb565
+	unsigned int RGB888_red, RGB888_green, RGB888_blue;//RGB888μ?èy??í¨μà
+	unsigned int Gray;//?ò?è?μ
+	unsigned char Thre;//?t?μ?ˉ?μ
+	int sizeLength[3];// ±?3¤μ???·?
+	double A_O = 0, C_O = 0, B_O = 0;//?àà?μ???·?
+	double TargetX = 0.0, TargetY = 0.0;//é???í·×?±ê
+	int ConstantM = 0, ConstantN = 0;
+	int lengthMax = 0, lengthMin = 100000;
+	unsigned int pointSt[2];//??è??aê??ì2a×?±ê?μ
+	unsigned int final_x[3];//èy??μ?×?±ê
+	unsigned int final_y[3];
+	unsigned int actual_x[3];//êμ?êèy??μ?×?±ê
+	unsigned int actual_y[3];
+	unsigned char A, B, C;
+	unsigned char data1[2];//????×?3¤±?á????μ
+	unsigned char data2[2];//????×??ì±?á????μ
+	float DistPerPixel = 0.0;
+	unsigned int edgeSt, edgeEnd;//×ó±??μoíóò±??μoá×?±ê
+	unsigned char tempThis, tempFront;//?÷?-?·±è??ê±μ?á???áùê±?????μ
+	unsigned char countFlag = 0;//ê?·??aê?D??-?·μ?±ê??
+	unsigned int center_Hor;//D??-?·μ??eê??DD?oá×?±ê
+	unsigned int m, n;//D??-?·?÷òy
+	unsigned int whiteDis;//
+	unsigned char bitCount = 7;//8??bit??êy
+	unsigned char stepCount = 0;//402?3¤??êy
+	unsigned int Max = 0;//?ó×?′ó?íμ??D??±?á?
+	unsigned int c0 = 0, c1 = 0;//c0:í?D???êy￡?c1:?ó?íμ?×?′ó?μ
+	unsigned int center_s = 0;//center start
+	unsigned int b = 0;
+	unsigned int counter = 0;
+
+	/* éè??òo?§é¨?è·??ò?a ×ó????->óòé??? */
+	//ILI9341_GramScan(2);
+	//	for(i=0;i<9600;i++)
+	//  ThreMatrix[i]=0x00;
+	for (i = 0; i < 240; i++)
+	{
+		for (j = 0; j < 320; j++)
+		{
+			fscanf(fp, "%s", cl);
+			sscanf(cl, "%x", &Camera_Data);
+			//READ_FIFO_PIXEL(Camera_Data);		/* ′óFIFO?á3?ò???rgb565????μ?Camera_Data±?á? */
+			//		ILI9341_Write_Data(Camera_Data);//êy?YD′è?LCD?D??ê?
+			//rgb565×argb888
+			RGB888_red = (Camera_Data >> 8) & 0xf8;
+			RGB888_green = (Camera_Data >> 3) & 0xfc;
+			RGB888_blue = (Camera_Data << 3) & 0xf8;
+			//rgb888?ò?è?ˉ
+			Gray = (RGB888_red * 30 + RGB888_green * 59 + RGB888_blue * 11 + 50) / 100;
+			//rgb888?t?μ?ˉ
+			Camera_Data_copy = (unsigned int)(((255 << 8) & 0xF800) | ((255 << 3) & 0x7E0) | ((255 >> 3)));
+			//			Camera_Data_copy=(unsigned)(((0<< 8) & 0xF800) | ((0 << 3) & 0x7E0) | ((0 >> 3)));
+			if (Gray>239)
+			{
+				Thre = 0x01;//Thre=1
+				bitCount = 7 - j % 8;
+				ThreMatrix[i * 40 + j / 8] = ThreMatrix[i * 40 + j / 8] | (Thre << (bitCount));
+				//printf("%x %d  %d\n", ThreMatrix[i + (stepCount)],i,j);
+				Camera_Data_copy = (unsigned int)(((255 << 8) & 0xF800) | ((255 << 3) & 0x7E0) | ((255 >> 3)));//rgb888×argb565
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 255;
+			}
+			else
+			{
+				Thre = 0xfe;//Thre=0
+				bitCount = 7 - j % 8;
+				ThreMatrix[i * 40 + j / 8] = ThreMatrix[i * 40 + j / 8] & (Thre << (bitCount));
+				//printf("%x %d  %d\n", ThreMatrix[i + (stepCount)], i, j);
+				Camera_Data_copy = (unsigned int)(((0 << 8) & 0xF800) | ((0 << 3) & 0x7E0) | ((0 >> 3)));
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 0;
+			}
+			//êy?Y′?è??t?μ?ˉ???ó￡?ò?′yí???′|àí
+			//	ThreMatrix[i+(stepCount)]|=Thre<<(bitCount--);
+			//DEBUG("0x%x\t",Camera_Data);//′??úμ÷ê?ê?3?
+			//ILI9341_Write_Data(Camera_Data_copy);
+			/*
+			if (bitCount == 0)
+			{
+			stepCount++;
+			if (stepCount == 40)
+			stepCount = 0;
+			bitCount = 7;
+			continue;
+			}
+			bitCount--;
+			*/
+		}
+	}
+	//	DEBUG("ok");
+	cvNamedWindow("aa", 0);
+	cvShowImage("aa", bwImage);
+	cvWaitKey(0);
+	//í????Dèy??°×è|×?±ê?ì2a
+	bitCount = 7;
+	c0 = 0;
+	for (i = 0; i<240; i++)
+	{
+		for (j = 1; j<320; j++)
+		{
+			x = 0;
+
+			if (j == 1)
+			{
+				x = 0;
+				bitCount = 7 - (j - 1) % 8;
+				ThreMatrix[i * 40 + (j - 1) / 8] = (0x7f)&ThreMatrix[i * 40 + (j - 1) / 8];
+				//cout << ThreMatrix[i * 40 + (j - 1) / 8];
+				//printf("%d", ThreMatrix[i * 40 + (j - 1) / 8]);
+				//cvWaitKey(0);
+			}
+			if (j == 319)
+			{
+				x = 0;
+				bitCount = 7 - j % 8;
+				ThreMatrix[i * 40 + j / 8] = (0xfe)&ThreMatrix[i * 40 + j / 8];
+				//cout << ThreMatrix[i * 40 + (j - 1) / 8];
+				//cvWaitKey(0);
+			}
+
+
+			bitCount = 7 - j % 8;
+			tempThis = (ThreMatrix[i * 40 + j / 8] >> bitCount) & 0x01;
+			bitCount = 7 - (j - 1) % 8;
+			tempFront = (ThreMatrix[i * 40 + (j - 1) / 8] >> bitCount) & 0x01;
+
+
+
+			//DEBUG("tempFront  %x",tempThis);
+
+
+			//	 DEBUG("tempThis  %x",tempThis);
+			if (tempThis != tempFront)
+			{
+				//DEBUG("%d", countFlag);
+				//printf("%x\n", tempThis);
+				//printf("%x\n", tempFront);
+				//cout << i << "  " << j << endl;
+				pointSt[countFlag] = j;
+				countFlag++;
+			}
+
+			if (countFlag >= 2)
+			{
+				//DEBUG("%d", countFlag);
+				//cout<<
+				countFlag = 0;
+				center_Hor = (pointSt[0] + pointSt[1]) / 2;
+				center_s = center_Hor;
+				for (m = i;; m++)
+				{
+					x = 0;
+					edgeSt = 0;
+					edgeEnd = 0;
+
+					for (n = center_Hor;; n--)
+					{
+						x = 0;
+						if (n == 0)
+						{
+							edgeSt = n;
+							break;
+						}
+						bitCount = 7 - n % 8;
+						tempThis = (ThreMatrix[m * 40 + n / 8] >> bitCount) & 0x01;
+						bitCount = 7 - (n - 1) % 8;
+						tempFront = (ThreMatrix[m * 40 + (n - 1) / 8] >> bitCount) & 0x01;
+						Area[c0]++;
+						if (tempThis != tempFront)
+						{
+							edgeSt = n;
+							break;
+						}
+					}
+					for (n = center_Hor;; n++)
+					{
+						x = 0;
+						if (n == 319)
+						{
+							edgeEnd = 319;
+							break;
+						}
+						bitCount = 7 - n % 8;
+						tempThis = (ThreMatrix[m * 40 + n / 8] >> bitCount) & 0x01;
+						bitCount = 7 - (n + 1) % 8;
+						tempFront = (ThreMatrix[m * 40 + (n + 1) / 8] >> bitCount) & 0x01;
+						Area[c0]++;
+						if (tempThis != tempFront)
+						{
+							edgeEnd = n;
+							break;
+						}
+					}
+					for (whiteDis = edgeSt; whiteDis <= edgeEnd; whiteDis++)
+					{
+						x = 0;
+						printf("before: %x\n", ThreMatrix[m * 40 + whiteDis / 8]);
+						bitCount = 7 - whiteDis % 8;
+						if (bitCount == 0)
+							ThreMatrix[m * 40 + whiteDis / 8] = ((0xfe) << bitCount)&ThreMatrix[m * 40 + whiteDis / 8];
+						else
+							ThreMatrix[m * 40 + whiteDis / 8] = (((0xfe) << bitCount) | (0xff) >> ((8 - bitCount) % 8))&ThreMatrix[m * 40 + whiteDis / 8];
+						printf("after: %x\n", ThreMatrix[m * 40 + whiteDis / 8]);
+					}
+					center_Hor = (edgeSt + edgeEnd) / 2;
+					widths[c1] = edgeEnd - edgeSt;
+					c1++;
+					bitCount = 7 - center_Hor % 8;
+					if (m == 239)
+						tempThis = 0;
+					else
+						tempThis = (ThreMatrix[(m + 1) * 40 + center_Hor / 8] >> bitCount) & 0x01;
+					if (tempThis == 0) {
+						//			DEBUG("m=%d",m);
+						//DEBUG("i=%d", i);
+						cout << "m: " << m << " i: " << i << endl;
+						height[c0] = m - i;
+						Max = 0;
+						for (b = 0; b<c1; b++){
+							if (Max<widths[b])
+								Max = widths[b];
+						}
+						width[c0] = Max;
+						radio[c0] = (float)width[c0] / (float)height[c0];
+						center_w[c0] = (center_s + center_Hor) / 2;
+						center_h[c0] = (i + m) / 2;
+						c1 = 0;
+						//DEBUG("%d  %d", center_w[c0], center_h[c0]);
+						cout << "width: " << width[c0] << endl;
+						cout << center_w[c0] << "  " << center_h[c0] << endl;
+						cvWaitKey(0);
+						c0++;
+						break;
+					}
+
+				}
+
+
+			}
+
+
+		}
+	}
+
+	//?t?μ?ˉí?
+	/*
+	for(i = 0; i < 240; i++)
+	{
+	for(j = 0; j < 320; j++)
+	{
+	Camera_Data_copy=(unsigned)(((0<< 8) & 0xF800) | ((0 << 3) & 0x7E0) | ((0 >> 3)));
+	bitCount=7-j%8;
+	if(((ThreMatrix[i*40+j/8]>>bitCount)&0x01)==0x00)
+	{
+	Camera_Data_copy=(unsigned)(((0<< 8) & 0xF800) | ((0 << 3) & 0x7E0) | ((0 >> 3)));
+	}else if(((ThreMatrix[i*40+j/8]>>bitCount)&0x01)==0x01)
+	{
+	Camera_Data_copy=(unsigned)(((255<< 8) & 0xF800) | ((255 << 3) & 0x7E0) | ((255 >> 3)));
+	}
+	ILI9341_Write_Data(Camera_Data_copy);
+	//DEBUG("0x%x",Camera_Data_copy);
+	}
+	}
+
+	*/
+
+	//è￥??????
+	//DEBUG("ok");
+	for (i = 0; i < c0; i++){
+
+		if (Area[i]>(0.05 * 320 * 240) && radio[i] > 0.1&&radio[i] < 10.0){
+			temp_A[counter] = Area[i];
+			temp_w[counter] = center_w[i];
+			temp_h[counter] = center_h[i];
+			counter++;
+			//DEBUG("%d", counter);
+		}
+	}
+
+	for (i = 0; i<counter; i++)
+	{
+		T[i] = temp_A[i];
+	}
+
+	sort(temp_A, counter);
+	counter = 0;
+
+	for (i = 0; i<3; i++)
+	{
+		final_x[i] = temp_w[MaxNum[i]];
+		final_y[i] = temp_h[MaxNum[i]];
+		//DEBUG("ok");
+	}
+
+
+	//??èy??μ?±?3¤
+	sizeLength[0] = (final_x[0] - final_x[1])*(final_x[0] - final_x[1]) + (final_y[0] - final_y[1])*(final_y[0] - final_y[1]);
+	sizeLength[1] = (final_x[2] - final_x[1])*(final_x[2] - final_x[1]) + (final_y[2] - final_y[1])*(final_y[2] - final_y[1]);
+	sizeLength[2] = (final_x[0] - final_x[2])*(final_x[0] - final_x[2]) + (final_y[0] - final_y[2])*(final_y[0] - final_y[2]);
+	//?D?????Dí???μ?°×μ?×?±ê1éê? AC×?3¤±?￡?AB×??ì±?
+	for (i = 0; i<3; i++)
+	{
+		if (sizeLength[i]>lengthMax)
+			lengthMax = sizeLength[i];
+		if (sizeLength[i]<lengthMin)
+			lengthMin = sizeLength[i];
+	}
+	for (i = 0; i<3; i++)
+	{
+		if (sizeLength[i] == lengthMax)
+		{
+			data1[0] = i;
+			data1[1] = (i + 1) % 3;
+		}
+		if (sizeLength[i] == lengthMin);
+		{
+			data2[0] = i;
+			data2[1] = (i + 1) % 3;
+		}
+	}
+	for (i = 0; i<2; i++)
+	{
+		for (j = 0; j<2; j++)
+		{
+			if (data1[i] == data2[j])
+			{
+				A = data1[i];
+				break;
+			}
+		}
+	}
+	for (i = 0; i<2; i++)
+	{
+		if (data1[i] != A)
+			C = data1[i];
+	}
+	for (i = 0; i<2; i++)
+	{
+		if (data2[i] != A)
+			B = data2[i];
+	}
+
+
+	//????êμ?ê?àà?
+	DistPerPixel = 0 * 0;//3?ê??μ￡?′y2a(????·?￡?òò?a?àà??μó?μ?ê???·?)
+	A_O = ((final_x[A] - 120)*(final_x[A] - 120) + (final_y[A] - 160)*(final_y[A] - 160))*DistPerPixel;
+	B_O = ((final_x[B] - 120)*(final_x[B] - 120) + (final_y[B] - 160)*(final_y[B] - 160))*DistPerPixel;
+	C_O = ((final_x[C] - 120)*(final_x[C] - 120) + (final_y[C] - 160)*(final_y[C] - 160))*DistPerPixel;
+	//????é???í·×?±ê
+	actual_x[0] = 0; actual_y[0] = 0;  //êμ?êAμ?×?±ê ,′yì?è?
+	actual_x[1] = 0; actual_y[1] = 0;  //êμ?êBμ?×?±ê
+	actual_x[2] = 0; actual_y[2] = 0;  //êμ?êCμ?×?±ê
+
+	ConstantM = ((A_O - B_O - actual_x[0] * actual_x[0] + actual_x[1] * actual_x[1] - actual_y[0] * actual_y[0] + actual_y[1] * actual_y[1]));
+	ConstantN = ((B_O - C_O - actual_x[1] * actual_x[1] + actual_x[2] * actual_x[2] - actual_y[1] * actual_y[1] + actual_y[2] * actual_y[2]));
+	TargetX = (double)((ConstantM*(actual_y[2] - actual_y[1])) - ConstantN*(actual_y[1] - actual_y[0]));
+	TargetX = TargetX / (2 * (actual_x[1] - actual_x[0])*(actual_y[2] - actual_y[1]) - 2 * (actual_x[2] - actual_x[1])*(actual_y[1] - actual_y[0]));
+	TargetY = (double)((ConstantM*(actual_x[2] - actual_x[1])) - ConstantN*(actual_x[1] - actual_x[0]));
+	TargetY = TargetX / (2 * (actual_y[1] - actual_y[0])*(actual_x[2] - actual_x[1]) - 2 * (actual_y[2] - actual_y[1])*(actual_x[1] - actual_x[0]));
+
+}
