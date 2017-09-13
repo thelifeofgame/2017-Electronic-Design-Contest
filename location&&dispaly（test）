@@ -1,0 +1,236 @@
+//图像内单通道图像定位算法
+//c++完整代码，不可直接运行于keil
+/*
+该部分代码分为两个函数  location（）   display（） 
+location（）： 是从底层自己设计的像素级定位算法，功能实现对图像中led灯区域的定位；
+diaplay （）： 该函数是纯测试函数，功能实现为将16位数（240x320个）的文件读取转化为RGB图像并显示。
+*/
+int location()
+{
+        //原始图像载入
+	IplImage*src = cvLoadImage("thresh.png", 0);//以灰度的方式载入
+	IplImage*srcImage = cvLoadImage("black.png");
+	cvThreshold(src, src, 150, 255, THRESH_BINARY);//二值化
+	cvShowImage("srcp", src);//显示原图
+	int rows = src->height;
+	int cols = src->width;
+	int temp, temp_p;
+	int Max = 0;
+	int count = 0;
+	int point[320][2] = { 0 };
+	int c0 = 0, c1 = 0, c2 = 0, cnts[240] = { 0 };
+	int center, center_s, center_w[240] = { 0 }, center_h[240] = { 0 };
+	int width[240], height[240];
+	double ratio[240];
+	int widths[240] = { 0 };
+        //遍历图像
+	for (int i = 0; i < rows; i++){
+		//cout << "i: " << i << endl;
+		for (int j = 1; j < cols; j++)
+		{
+		        //边界特殊化处理
+			if (j == 1)*((unsigned char*)src->imageData + i*src->widthStep + j - 1) = 0;
+			if (j == 319)*((unsigned char*)src->imageData + i*src->widthStep + j) = 0;
+			temp = *((unsigned char*)src->imageData + i*src->widthStep + j);//通过temp与temp_p找到图像中单通道区域的边界点
+			temp_p = *((unsigned char*)src->imageData + i*src->widthStep + j - 1);
+			//确认边界点个数
+			if (temp != temp_p){
+
+				point[count][0] = i;
+				point[count][1] = j;
+				count++;
+
+			}
+			//找到两个边界点后从当前行中两边界点的中间点向下左右遍历以找到该单连通区域
+			if (count == 2){
+				count = 0;
+				//printf("%d\n",i);
+				center = (point[0][1] + point[1][1]) / 2;
+				//cout << "firstSt: center_x:" << i << "\tcenter_y:" << center << endl;
+				center_s = center;
+				for (int m = i;; m++)
+				{
+
+					int x1 = 0, x2 = 0;
+					//向左
+					for (int n = center;; n--)
+					{
+						if (n == 0){ x1 = n; break; }
+						temp = *((unsigned char*)src->imageData + m*src->widthStep + n);
+						temp_p = *((unsigned char*)src->imageData + m*src->widthStep + n - 1);
+						//*((unsigned char*)src->imageData + m*src->widthStep + n-1) = 0;
+						cnts[c0]++;
+						if (temp != temp_p){
+							x1 = n;
+							break;
+						}
+					}
+					//向右
+					for (int n = center;; n++)
+					{
+						if (n == 319){ x2 = n; break; }
+						temp = *((unsigned char*)src->imageData + m*src->widthStep + n);
+						temp_p = *((unsigned char*)src->imageData + m*src->widthStep + n + 1);
+						//*((unsigned char*)src->imageData + m*src->widthStep + n-1)=0;
+						cnts[c0]++;
+						if (temp != temp_p){
+							x2 = n;
+							break;
+						}
+					}
+					//cout << "x1 " << x1 << "  x2 " << x2 << endl;
+					for (int black = x1; black <= x2; black++){
+						*((unsigned char*)src->imageData + m*src->widthStep + black) = 0;
+						cvNamedWindow("src", 0);
+						cvShowImage("src", src);
+						//cout << "m: " << m << " black: " << black;
+						//cvWaitKey(0);
+					}
+					//cout <<"x1: "<<x1<<" x2: "<<x2<< "m: " << m << endl;
+					//cvWaitKey(0);
+
+					//cvWaitKey(0);
+					center = (x1 + x2) / 2;
+					widths[c1] = x2 - x1;
+					c1++;
+					if (m == 239)temp = 0;
+					else temp = *((unsigned char*)src->imageData + (m + 1)*src->widthStep + center);
+					if (temp == 0){//即找到一个区域并输出信息
+						//cout << "firstEnd: center_x:" << m << " center_y:" << center << endl;
+
+						height[c0] = m - i;
+						Max = 0;
+						for (int b = 0; b < height[c0]; b++){
+							if (Max < widths[b])Max = widths[b];
+						}
+						width[c0] = Max;
+						ratio[c0] = (double)width[c0] / (double)height[c0];
+						center_w[c0] = (center + center_s) / 2;
+						center_h[c0] = (i + m) / 2;
+						c1 = 0;
+						cout << "center: " << center_w[c0] << " " << center_h[c0] << "    Area: " << cnts[c0] << "\n" << endl;
+						cout << "width: " << width[c0] << "   height: " << height[c0] << "\n" << endl;
+						cout << "横宽比：" << ratio[c0] << "\n" << endl;
+						c0++;//c0不置零
+
+						CvPoint point1, point2;
+						point1.x = center_w[c0] - width[c0] / 2;
+						point1.y = center_h[c0] - height[c0] / 2;
+						point2.x = center_w[c0] + width[c0] / 2;
+						point2.y = center_h[c0] + height[c0] / 2;
+
+						cvNamedWindow("src", 0);
+						cvShowImage("src", src);
+						//cvShowImage("srcImage",srcImage);
+						cvWaitKey(0);
+						cvRectangle(srcImage, point1, point2, cvScalar(255, 255, 255), 3, 8, 0);
+						//system("pause");
+						break;
+					}
+				}
+				//break;
+			}
+		}
+	}
+	//cvWaitKey();
+
+	system("pause");
+	return 0;
+}
+//16位数RGB565 data转RGB888并显示为图片的测试算法
+int display()
+{
+	FILE *fp;
+	int nValude = 0;
+	int b, g, r;
+	char cl[100];
+	IplImage* srcImage;
+	IplImage *bwImage;
+	IplImage *bwImage1;
+	IplImage *bwImage2;
+	int W = 640;
+	int H = 480;
+	CvSize cvSize;
+	cvSize.width = W;
+	cvSize.height = H;
+
+	unsigned char max = 255;
+	unsigned char min = 0;
+	if ((fp = fopen("oneFrame10.txt", "r")) == NULL)
+		exit(1);
+	bwImage = cvCreateImage(cvSize, 8, 1);
+	bwImage1 = cvCreateImage(cvSize, 8, 1);
+	bwImage2 = cvCreateImage(cvSize, 8, 1);
+	srcImage = cvCreateImage(cvSize, 8, 3);
+	for (int i = 0; i< H; i++)
+	{
+		//uchar* ptr = (uchar*) (bwImage->imageData + i*bwimage->widthStep);
+		for (int j = 0; j<W; j++)
+		{
+			fscanf(fp, "%s", cl);
+			sscanf(cl, "%x", &nValude);
+			r = (nValude&(0xf800)) >> 11;//
+			g = (nValude&(0x07e0)) >> 5;//
+			b = (nValude&(0x001f));//
+			unsigned char RGB888[3];
+			RGB888[0] = (nValude >> 8) & 0xf8; //转换最高5位成8位红色的高5位
+			RGB888[1] = (nValude >> 3) & 0xfc; //转换中间6位成8位绿色的高6位
+			RGB888[2] = (nValude << 3) & 0xf8; //转换低5位成8位蓝色的高5位
+
+
+
+			double value = ((double)RGB888[0] * 30 + (double)RGB888[1] * 59 + (double)RGB888[2] * 11 + 50) / 100;
+			//r = r | ((r & 0x38) >> 3);
+			//printf("%x  \n", nValude);
+			//cout << b << " " << g << " " << r << endl;
+
+
+
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 0) = RGB888[2];
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 1) = RGB888[1];
+			*((unsigned char*)srcImage->imageData + i*srcImage->widthStep + j*srcImage->nChannels + 2) = RGB888[0];
+			//cout << value << endl;
+			if (value>240)
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 255;
+			else
+				*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j) = 0;
+			//cout << r << "  ";
+
+		}
+
+	}
+	//cvMerge(bwImage2, bwImage1, bwImage, 0, srcImage);
+	//cvNamedWindow("RGB", 0);
+	cvShowImage("RGB", srcImage);
+	cvShowImage("thresh", bwImage);
+	cvSaveImage("thresh.png", bwImage);
+	for (int i = 0; i < H; i++)
+	{
+		//uchar* ptr = (uchar*) (bwImage->imageData + i*bwimage->widthStep);
+		for (int j = 0; j < W; j++)
+		{
+			//||(*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+			//	((*((unsigned char*)bwImage->imageData + (i + 1) * bwImage->widthStep + j)))
+			//|| (*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+			//	((*((unsigned char*)bwImage->imageData + (i - 1) * bwImage->widthStep + j)))
+			if ((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+				((*((unsigned char*)bwImage->imageData + (i + 1)*bwImage->widthStep + j)))
+				){
+				//if (i!=239)
+				*((unsigned char*)bwImage1->imageData + i*bwImage1->widthStep + j) = 255;
+			}
+			else if ((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j)) !=
+				((*((unsigned char*)bwImage->imageData + i*bwImage->widthStep + j - 1)))){
+				*((unsigned char*)bwImage1->imageData + (i + 1)*bwImage1->widthStep + j) = 255;
+			}
+			else
+				*((unsigned char*)bwImage1->imageData + i*bwImage1->widthStep + j) = 0;
+		}
+	}
+	cvShowImage("counter", bwImage1);
+	cvWaitKey(0);
+	if (fclose(fp) != 0)
+		exit(1);
+	system("pause");
+	return 0;
+}
